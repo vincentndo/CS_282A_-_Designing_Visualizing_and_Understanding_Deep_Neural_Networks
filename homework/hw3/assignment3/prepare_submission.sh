@@ -24,6 +24,6 @@ if [ ! -f "transformer.py" ]; then
    echo -e "\e[31mWARNING!!! 'transformer.py' does not exist. It doesn't look like this submission is complete\e[39m."
 fi
 
-zip -r submission.zip "models/" "1 Language Modeling.ipynb" "2 Summarization.ipynb" "transformer_layers.py" "transformer_attention.py" "transformer.py"
+zip -r assignment3submission.zip "models/" "1 Language Modeling.ipynb" "2 Summarization.ipynb" "transformer_layers.py" "transformer_attention.py" "transformer.py"
 
 echo "Submission complete. Please submit the \"submission.zip\" file which has been created."
