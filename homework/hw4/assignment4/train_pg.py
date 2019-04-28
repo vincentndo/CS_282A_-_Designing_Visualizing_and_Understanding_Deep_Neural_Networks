@@ -6,6 +6,7 @@ Adapted for CS 182/282A Spring 2019 by Daniel Seita
 """
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 import gym
 import logz
 import os
@@ -13,6 +14,7 @@ import time
 import inspect
 import sys
 from multiprocessing import Process
+import sklearn.preprocessing as skp
 
 
 def build_mlp(input_placeholder, output_size, scope, n_layers, size,
@@ -99,6 +101,7 @@ class Agent(object):
         # ------------------------------------------------------------------
         # START OF YOUR CODE
         # ------------------------------------------------------------------
+        sy_adv_n = tf.placeholder(shape=[None], name="adv", dtype=tf.float32)
         # ------------------------------------------------------------------
         # END OF YOUR CODE
         # ------------------------------------------------------------------
@@ -138,6 +141,7 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            sy_logits_na = build_mlp(sy_ob_no, self.ac_dim, "policy_gradient", self.n_layers, self.size)
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -146,6 +150,8 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            sy_mean = build_mlp(sy_ob_no, self.ac_dim, "policy_gradient", self.n_layers, self.size)
+            sy_logstd = tf.Variable( tf.zeros([self.ac_dim]) )
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -184,6 +190,12 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            dist = tf.nn.softmax(sy_logits_na)
+            cum_dist = tf.cumsum(dist, axis=1)
+            batch_size = tf.shape(sy_logits_na)[0]
+            sample = tf.random_uniform( [batch_size], minval=0, maxval=1 )
+            greater = tf.expand_dims(sample, axis=-1) >= cum_dist
+            sy_sampled_ac = tf.reduce_sum( tf.cast(greater, dtype=tf.int32), axis=1 )
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -192,6 +204,8 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            sample = tf.random_normal( tf.shape(sy_mean), mean=0, stddev=1 )
+            sy_sampled_ac = sy_mean + tf.exp(sy_logstd) * sample
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -229,6 +243,8 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            dist = tf.distributions.Categorical(logits=sy_logits_na)
+            sy_logprob_n = dist.log_prob(sy_ac_na)
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -237,6 +253,8 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
+            sy_logprob_n = dist.log_prob(sy_ac_na)
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -282,6 +300,7 @@ class Agent(object):
         # ------------------------------------------------------------------
         # START OF YOUR CODE
         # ------------------------------------------------------------------
+        self.loss = tf.reduce_mean( - self.sy_logprob_n * self.sy_adv_n )
         # ------------------------------------------------------------------
         # END OF YOUR CODE
         # ------------------------------------------------------------------
@@ -319,6 +338,7 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
+            ac = self.sess.run( self.sy_sampled_ac, feed_dict={self.sy_ob_no: ob[None, :]} )
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -399,6 +419,21 @@ class Agent(object):
         # ------------------------------------------------------------------
         # START OF YOUR CODE
         # ------------------------------------------------------------------
+        q_n = []
+        if self.reward_to_go:
+            for re in re_n:
+                T = re.size
+                for i in range(T):
+                    discounts = np.array( [self.gamma ** j for j in range(T - i)] )
+                    q_n.append( np.sum(re[i:] * discounts) )
+        else:
+            for re in re_n:
+                T = re.size
+                discounts = np.array( [self.gamma ** i for i in range(T)] )
+                q = [np.sum(re * discounts)] * T
+                q_n.extend(q)
+
+        q_n = np.array(q_n)
         # ------------------------------------------------------------------
         # END OF YOUR CODE
         # ------------------------------------------------------------------
@@ -445,7 +480,7 @@ class Agent(object):
             # ------------------------------------------------------------------
             # START OF YOUR CODE
             # ------------------------------------------------------------------
-            pass
+            adv_n = skp.scale(adv_n)
             # ------------------------------------------------------------------
             # END OF YOUR CODE
             # ------------------------------------------------------------------
@@ -481,6 +516,7 @@ class Agent(object):
         # ------------------------------------------------------------------
         # START OF YOUR CODE
         # ------------------------------------------------------------------
+        self.sess.run( (self.update_op, ), feed_dict={self.sy_ob_no: ob_no, self.sy_ac_na: ac_na, self.sy_adv_n: adv_n} )
         # ------------------------------------------------------------------
         # END OF YOUR CODE
         # ------------------------------------------------------------------
